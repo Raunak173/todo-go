@@ -6,4 +6,5 @@ import (
 
 func SyncDB() {
 	Db.AutoMigrate(&models.Task{})
+	Db.AutoMigrate(&models.User{})
 }
