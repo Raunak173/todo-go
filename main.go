@@ -8,7 +8,8 @@ import (
 )
 
 func init() {
-	// initializers.LoadEnv()  Cant use this in deployment
+	// Cant use this in deployment
+	// initializers.LoadEnv()
 	initializers.ConnectToDB()
 	initializers.SyncDB()
 }
