@@ -10,4 +10,7 @@ type User struct {
 	LastName  string `json:"last_name"`
 	Email     string `json:"email" gorm:"unique"`
 	Password  string `json:"password"`
+
+	//A user and task will have ont -> many relationship
+	Tasks []Task `json:"tasks" gorm:"foreignKey:UserID"`
 }

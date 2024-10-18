@@ -12,7 +12,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// A struct of userBody that is use to be given by the user as body parameter
+// UserRequestBody struct for user registration and login
 type UserRequestBody struct {
 	FirstName string `json:"first_name" validate:"required"`
 	LastName  string `json:"last_name" validate:"required"`
@@ -20,30 +20,30 @@ type UserRequestBody struct {
 	Password  string `json:"password" validate:"required,min=5"`
 }
 
+// SignUp function for user registration
 func SignUp(c *gin.Context) {
-
 	var body UserRequestBody
 
-	//Binding json
+	// Bind JSON input to body struct
 	if err := c.BindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
 		return
 	}
 
-	//Validating body
+	// Validate the request body
 	if err := validate.Struct(body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"errors": err.Error()})
 		return
 	}
 
-	//Hash the password
+	// Hash the password
 	hash, err := bcrypt.GenerateFromPassword([]byte(body.Password), 10)
-
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to hash the password"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to hash the password"})
 		return
 	}
 
+	// Create the user
 	user := models.User{
 		FirstName: body.FirstName,
 		LastName:  body.LastName,
@@ -51,73 +51,75 @@ func SignUp(c *gin.Context) {
 		Password:  string(hash),
 	}
 
+	// Save the user to the database
 	result := initializers.Db.Create(&user)
-
 	if result.Error != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to hash the password"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to create the user"})
 		return
 	}
 
-	//Success
+	// Return the created user as a response
 	c.JSON(http.StatusCreated, gin.H{
 		"user": user,
 	})
 }
 
+// Login function for user authentication
 func Login(c *gin.Context) {
-
 	var body struct {
 		Email    string `json:"email" validate:"required,email"`
 		Password string `json:"password" validate:"required,min=5"`
 	}
 
-	//Binding json
+	// Bind JSON input to body struct
 	if err := c.BindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid input"})
 		return
 	}
 
-	//Validating body
+	// Validate the request body
 	if err := validate.Struct(body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"errors": err.Error()})
 		return
 	}
 
-	//Check the user through email
+	// Check if the user exists by email
 	var user models.User
 	initializers.Db.Where("email = ?", body.Email).First(&user)
 
+	// If user not found, return error
 	if user.ID == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"errors": "Invalid email or password"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid email or password"})
 		return
 	}
 
-	//Compare the sent password with the user found password
+	// Compare the given password with the stored password hash
 	err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(body.Password))
-
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid email or password"})
 		return
 	}
 
-	//Generating a jwt
+	// Generate a JWT token
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"sub": user.ID,
-		"exp": time.Now().Add(time.Hour * 24 * 30).Unix(),
+		"sub": user.ID,                                   // Subject (User ID)
+		"exp": time.Now().Add(time.Hour * 24 * 7).Unix(), // Token expiration time
 	})
 
-	// Sign and get the complete encoded token as a string using the secret
+	// Sign the token with the secret key
 	tokenString, err := token.SignedString([]byte(os.Getenv("SECRET")))
-
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to create a jwt token"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create token"})
 		return
 	}
 
-	//Setting a cookie
+	// Set the token in a cookie
 	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie("Authorization", tokenString, 3600*24*24, "", "", false, true)
+	c.SetCookie("Authorization", tokenString, 3600*24*7, "", "", false, true)
 
-	//Success
-	c.JSON(http.StatusOK, gin.H{})
+	// Return success response
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Login successful",
+		"user":    user,
+	})
 }
