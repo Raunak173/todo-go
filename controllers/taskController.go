@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
@@ -64,13 +65,44 @@ func GetTasks(c *gin.Context) {
 	// Get the logged-in user
 	user, _ := c.Get("user")
 
+	//For pagination, we will get limit and offset
+	limit := 10
+	l := c.Query("limit")
+	if l != "" {
+		parsedLimit, err := strconv.Atoi(l)
+		if err == nil {
+			limit = parsedLimit
+		}
+	}
+
+	offset := 0
+	o := c.Query("offset")
+	if o != "" {
+		parsedOffset, err := strconv.Atoi(o)
+		if err == nil {
+			offset = parsedOffset
+		}
+	}
+
 	// Find all tasks for the user
 	var tasks []models.Task
-	initializers.Db.Where("user_id = ?", user.(models.User).ID).Find(&tasks)
+	initializers.Db.Where("user_id = ?", user.(models.User).ID).
+		Limit(limit).Offset(offset).Find(&tasks)
+
+	// Check the total number of tasks for the user
+	var totalTasks int64
+	initializers.Db.Model(&models.Task{}).Where("user_id = ?", user.(models.User).ID).Count(&totalTasks)
+
+	// Calculate next offset
+	nextOffset := offset + limit
+	if nextOffset >= int(totalTasks) {
+		nextOffset = -1 // No more tasks to load
+	}
 
 	// Success
 	c.JSON(http.StatusOK, gin.H{
-		"tasks": tasks,
+		"tasks":       tasks,
+		"next_offset": nextOffset,
 	})
 }
 
